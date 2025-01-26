@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "lastModified": "2024-03-20T10:00:00Z",
+  "categories": [
+    {
+      "id": "cat_1",
+      "name": "Projektplanung",
+      "order": 1,
+      "tags": ["planung", "start"],
+      "isFavorite": false,
+      "textBlocks": [
+        {
+          "id": "txt_1",
+          "title": "Projektstart Template",
+          "content": "Projekt: $clipboard\nZiel: \nTimeline:",
+          "versions": [
+            {
+              "version": 1,
+              "content": "...",
+              "createdAt": "2024-03-20T10:00:00Z"
+            }
+          ],
+          "tags": ["template", "start"],
+          "isFavorite": true,
+          "shortcut": "alt+1",
+          "lastUsed": "2024-03-20T10:00:00Z",
+          "useCount": 5
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "theme": "light",
+    "globalShortcut": "ctrl+space",
+    "autoBackup": true,
+    "aiIntegration": {
+      "enabled": false,
+      "apiKey": "",
+      "endpoint": ""
+    }
+  }
+} 
