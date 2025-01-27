@@ -1,30 +1,26 @@
 {
   "version": "1.0",
-  "lastModified": "2024-03-20T10:00:00Z",
+  "lastModified": "2025-01-27T02:15:22.421Z",
   "categories": [
     {
-      "id": "cat_1",
-      "name": "Projektplanung",
+      "id": "1",
+      "name": "Allgemein",
       "order": 1,
-      "tags": ["planung", "start"],
+      "tags": [
+        "allgemein"
+      ],
       "isFavorite": false,
+      "isOpen": false,
       "textBlocks": [
         {
-          "id": "txt_1",
-          "title": "Projektstart Template",
-          "content": "Projekt: $clipboard\nZiel: \nTimeline:",
-          "versions": [
-            {
-              "version": 1,
-              "content": "...",
-              "createdAt": "2024-03-20T10:00:00Z"
-            }
+          "id": "t1",
+          "title": "Konzept erklären",
+          "content": "Erkläre mir das Konzept als wäre ich 5 Jahre alt.",
+          "tags": [
+            "erklärung"
           ],
-          "tags": ["template", "start"],
-          "isFavorite": true,
-          "shortcut": "alt+1",
-          "lastUsed": "2024-03-20T10:00:00Z",
-          "useCount": 5
+          "isFavorite": false,
+          "useCount": 0
         }
       ]
     }
@@ -39,4 +35,4 @@
       "endpoint": ""
     }
   }
-} 
+}

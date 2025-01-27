@@ -1,116 +1,84 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, clipboard } from 'electron';
-import path from 'path';
+import { app, BrowserWindow, ipcMain } from 'electron';
+import * as path from 'path';
+import Store from 'electron-store';
+
+console.log('[Main] Starte Electron App');
+
+// Store initialisieren
+const store = new Store({
+  name: 'test-store',
+  defaults: {
+    testData: 'Hallo Welt'
+  }
+});
 
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow() {
+  // Debug: Zeige aktuelle Pfade
+  console.log('[Main] Current directory:', __dirname);
+  const preloadPath = path.join(__dirname, '../preload/index.js');
+  console.log('[Main] Preload path:', preloadPath);
+
   mainWindow = new BrowserWindow({
-    width: 400,
+    width: 800,
     height: 600,
-    frame: false,
-    transparent: false,
-    resizable: true,
-    movable: true,
-    hasShadow: true,
-    titleBarStyle: 'hidden',
     webPreferences: {
-      nodeIntegration: false,
+      nodeIntegration: true,
       contextIsolation: true,
-      preload: path.join(__dirname, '../preload.js')
+      sandbox: false,
+      preload: preloadPath,
+      devTools: true
     }
   });
 
-  mainWindow.setMinimumSize(300, 400);
+  // DevTools öffnen
+  mainWindow.webContents.openDevTools();
 
-  const htmlPath = path.join(__dirname, '../renderer/index.html');
-  console.log('Loading HTML from:', htmlPath);
-  
-  // DevTools nur im Entwicklungsmodus öffnen
-  if (process.env.NODE_ENV === 'development') {
-    mainWindow.webContents.openDevTools();
-  }
-  
-  mainWindow.loadFile(htmlPath);
+  // Debug-Events für die Webseite
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('[Main] Webseite wurde geladen');
+  });
 
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.error('Failed to load:', errorCode, errorDescription);
+    console.error('[Main] Fehler beim Laden der Webseite:', errorCode, errorDescription);
+  });
+
+  // Test-Daten speichern
+  const testData = 'Test ' + new Date().toISOString();
+  console.log('[Main] Speichere Test-Daten:', testData);
+  store.set('testData', testData);
+  console.log('[Main] Gespeicherte Daten:', store.get('testData'));
+
+  // IPC Handler registrieren
+  ipcMain.handle('TEST_STORE', () => {
+    const data = store.get('testData');
+    console.log('[Main] TEST_STORE aufgerufen, sende:', data);
+    return data;
+  });
+
+  // HTML laden
+  const htmlPath = path.join(__dirname, '../renderer/index.html');
+  console.log('[Main] Lade HTML von:', htmlPath);
+  mainWindow.loadFile(htmlPath);
+
+  // Debug: Log alle IPC Events
+  mainWindow.webContents.on('ipc-message', (event, channel, ...args) => {
+    console.log('[Main] IPC Message:', { channel, args });
   });
 }
 
+// App starten
 app.whenReady().then(() => {
-  globalShortcut.register('CommandOrControl+Space', () => {
-    if (mainWindow?.isVisible()) {
-      mainWindow.hide();
-    } else {
-      mainWindow?.show();
-    }
-  });
-
+  console.log('[Main] App ist bereit');
   createWindow();
-  registerIpcHandlers();
-});
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
-
-// IPC Channels
-const IPC = {
-  COPY_TO_CLIPBOARD: 'COPY_TO_CLIPBOARD',
-  GET_CLIPBOARD_CONTENT: 'GET_CLIPBOARD_CONTENT',
-  MINIMIZE_WINDOW: 'MINIMIZE_WINDOW',
-  MAXIMIZE_WINDOW: 'MAXIMIZE_WINDOW',
-  CLOSE_WINDOW: 'CLOSE_WINDOW'
-};
-
-// Registriere alle IPC-Handler
-function registerIpcHandlers() {
-  // Clipboard-Funktionen
-  ipcMain.handle(IPC.COPY_TO_CLIPBOARD, (_, text) => {
-    try {
-      console.log('Main: Kopiere in Zwischenablage:', text);
-      clipboard.writeText(text);
-      return true;
-    } catch (error) {
-      console.error('Main: Fehler beim Kopieren:', error);
-      throw error;
-    }
+  // Registriere globale Fehlerbehandlung
+  process.on('uncaughtException', (error) => {
+    console.error('[Main] Unbehandelter Fehler:', error);
   });
 
-  ipcMain.handle(IPC.GET_CLIPBOARD_CONTENT, () => {
-    try {
-      console.log('Main: Lese aus Zwischenablage');
-      const text = clipboard.readText();
-      console.log('Main: Inhalt der Zwischenablage:', text);
-      return text;
-    } catch (error) {
-      console.error('Main: Fehler beim Lesen:', error);
-      throw error;
-    }
+  process.on('unhandledRejection', (error) => {
+    console.error('[Main] Unbehandelte Promise-Ablehnung:', error);
   });
-
-  // Fenster-Steuerelemente
-  ipcMain.handle(IPC.MINIMIZE_WINDOW, () => {
-    if (!mainWindow) throw new Error('Fenster ist nicht initialisiert');
-    mainWindow.minimize();
-    return true;
-  });
-
-  ipcMain.handle(IPC.MAXIMIZE_WINDOW, () => {
-    if (!mainWindow) throw new Error('Fenster ist nicht initialisiert');
-    if (mainWindow.isMaximized()) {
-      mainWindow.unmaximize();
-    } else {
-      mainWindow.maximize();
-    }
-    return true;
-  });
-
-  ipcMain.handle(IPC.CLOSE_WINDOW, () => {
-    if (!mainWindow) throw new Error('Fenster ist nicht initialisiert');
-    mainWindow.close();
-    return true;
-  });
-} 
+}); 

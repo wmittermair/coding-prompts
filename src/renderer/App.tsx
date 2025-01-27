@@ -1,110 +1,54 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import './App.css';
 
-declare global {
-  interface Window {
-    electron: {
-      copyToClipboard: (text: string) => Promise<boolean>;
-      getClipboardContent: () => Promise<string>;
-      minimizeWindow: () => Promise<boolean>;
-      maximizeWindow: () => Promise<boolean>;
-      closeWindow: () => Promise<boolean>;
-    }
-  }
+// Typen für die Kategorien
+interface TextBlock {
+  id: string;
+  title: string;
+  content: string;
 }
 
-const DEMO_CATEGORIES = [
-  { 
-    id: '1', 
-    name: 'Projektplanung',
-    isOpen: false,
+interface Category {
+  id: string;
+  name: string;
+  isOpen?: boolean;
+  textBlocks: TextBlock[];
+}
+
+// Dummy-Daten
+const dummyCategories: Category[] = [
+  {
+    id: '1',
+    name: 'Begrüßungen',
+    isOpen: true,
     textBlocks: [
-      { 
-        id: 't1', 
-        title: 'Neues Projekt starten', 
-        content: 'Ich möchte ein neues Projekt erstellen. Der Projektname ist: $clipboard\n\nBitte erstelle:\n1. Eine sinnvolle Ordnerstruktur\n2. Notwendige Konfigurationsdateien\n3. Eine README.md mit Projektbeschreibung\n4. Eine erste Version der wichtigsten Dateien'
-      },
-      { 
-        id: 't2', 
-        title: 'Technologie-Stack', 
-        content: 'Welcher Tech-Stack würde für folgendes Projekt am besten passen: $clipboard\n\nBitte berücksichtige:\n- Wartbarkeit\n- Performance\n- Entwicklungsgeschwindigkeit\n- Community/Support'
+      {
+        id: '1-1',
+        title: 'Formelle Begrüßung',
+        content: 'Sehr geehrte Damen und Herren,\n\nich hoffe, diese Nachricht erreicht Sie gut.'
       },
       {
-        id: 't3',
-        title: 'Architektur-Review',
-        content: 'Bitte analysiere die aktuelle Projektstruktur und gib Verbesserungsvorschläge für:\n1. Code-Organisation\n2. Dateienstruktur\n3. Namenskonventionen\n4. Potenzielle Probleme'
+        id: '1-2',
+        title: 'Informelle Begrüßung',
+        content: 'Hallo zusammen,\n\nich hoffe, bei euch ist alles gut!'
       }
     ]
   },
-  { 
-    id: '2', 
-    name: 'Anweisungen',
-    isOpen: false,
-    textBlocks: [
-      { 
-        id: 't4', 
-        title: 'Feature implementieren', 
-        content: 'Bitte implementiere folgendes Feature: $clipboard\n\nWichtige Aspekte:\n- Clean Code Prinzipien\n- Typsicherheit\n- Fehlerbehandlung\n- Tests'
-      },
-      {
-        id: 't5',
-        title: 'Code Review',
-        content: 'Bitte überprüfe den folgenden Code auf:\n1. Potenzielle Bugs\n2. Performance-Probleme\n3. Best Practices\n4. Sicherheitslücken\n5. Verbesserungsmöglichkeiten'
-      },
-      {
-        id: 't6',
-        title: 'Bug fixen',
-        content: 'Es gibt einen Bug im Code: $clipboard\n\nBitte:\n1. Analysiere das Problem\n2. Erkläre die Ursache\n3. Schlage eine Lösung vor\n4. Implementiere die Lösung'
-      }
-    ]
-  },
-  { 
-    id: '3', 
-    name: 'Während dem Projekt',
+  {
+    id: '2',
+    name: 'E-Mail Vorlagen',
     isOpen: false,
     textBlocks: [
       {
-        id: 't7',
-        title: 'Code optimieren',
-        content: 'Bitte optimiere den folgenden Code-Abschnitt: $clipboard\n\nFokus auf:\n- Performance\n- Lesbarkeit\n- Wartbarkeit'
-      },
-      {
-        id: 't8',
-        title: 'Dokumentation erstellen',
-        content: 'Bitte erstelle eine Dokumentation für: $clipboard\n\nBenötigt wird:\n1. Funktionsbeschreibung\n2. Parameter/Rückgabewerte\n3. Beispiele\n4. Bekannte Einschränkungen'
-      },
-      {
-        id: 't9',
-        title: 'Tests schreiben',
-        content: 'Bitte erstelle Tests für: $clipboard\n\nAbdecken:\n1. Erfolgsfall\n2. Fehlerfälle\n3. Edge Cases\n4. Performance Tests'
-      }
-    ]
-  },
-  { 
-    id: '4', 
-    name: 'Vor Abschluss',
-    isOpen: false,
-    textBlocks: [
-      {
-        id: 't10',
-        title: 'Code Review Checkliste',
-        content: 'Bitte prüfe vor dem Commit:\n1. Sind alle Tests erfolgreich?\n2. Ist der Code dokumentiert?\n3. Gibt es keine Console.logs?\n4. Sind Variablennamen aussagekräftig?\n5. Ist der Code formatiert?'
-      },
-      {
-        id: 't11',
-        title: 'Performance Check',
-        content: 'Bitte analysiere die Performance von: $clipboard\n\nPrüfe auf:\n1. Unnötige Berechnungen\n2. Memory Leaks\n3. Render-Optimierungen\n4. Lazy Loading Möglichkeiten'
-      },
-      {
-        id: 't12',
-        title: 'Abschluss-Review',
-        content: 'Bitte führe ein finales Review durch:\n1. Code-Qualität\n2. Test-Abdeckung\n3. Dokumentation\n4. Performance\n5. Sicherheit'
+        id: '2-1',
+        title: 'Meeting Anfrage',
+        content: 'Können wir einen Termin für nächste Woche vereinbaren? Ich hätte Montag oder Dienstag zwischen 14-16 Uhr Zeit.'
       }
     ]
   }
 ];
 
-// Typen für die Navigation
+// Typ für die Navigation
 type NavigationItem = {
   id: string;
   type: 'category' | 'textBlock';
@@ -112,9 +56,81 @@ type NavigationItem = {
 };
 
 export const App: React.FC = () => {
-  const [categories, setCategories] = useState(DEMO_CATEGORIES);
+  const [categories, setCategories] = useState<Category[]>(dummyCategories);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [editingItem, setEditingItem] = useState<{ 
+    id: string, 
+    type: 'category' | 'textBlock' | 'textBlockTitle' | 'textBlockContent', 
+    value: string 
+  } | null>(null);
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyFeedback('In Zwischenablage kopiert!');
+      setTimeout(() => setCopyFeedback(null), 2000);
+    } catch (error) {
+      console.error('Fehler beim Kopieren:', error);
+      setCopyFeedback('Fehler beim Kopieren!');
+      setTimeout(() => setCopyFeedback(null), 2000);
+    }
+  };
+
+  const handleEdit = (id: string, type: 'category' | 'textBlock' | 'textBlockTitle' | 'textBlockContent') => {
+    const category = categories.find(c => c.id === id || c.textBlocks.some(t => t.id === id));
+    if (type === 'category' && category) {
+      setEditingItem({ id, type, value: category.name });
+    } else if ((type === 'textBlock' || type === 'textBlockTitle' || type === 'textBlockContent') && category) {
+      const textBlock = category.textBlocks.find(t => t.id === id);
+      if (textBlock) {
+        setEditingItem({ 
+          id, 
+          type, 
+          value: type === 'textBlockContent' ? textBlock.content : textBlock.title 
+        });
+      }
+    }
+  };
+
+  const handleDelete = (id: string, type: 'category' | 'textBlock') => {
+    if (type === 'category') {
+      setCategories(categories.filter(c => c.id !== id));
+    } else {
+      setCategories(categories.map(c => ({
+        ...c,
+        textBlocks: c.textBlocks.filter(t => t.id !== id)
+      })));
+    }
+    setSelectedId(null);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingItem) return;
+
+    setCategories(categories.map(category => {
+      if (editingItem.type === 'category' && category.id === editingItem.id) {
+        return { ...category, name: editingItem.value };
+      }
+      
+      return {
+        ...category,
+        textBlocks: category.textBlocks.map(block => {
+          if (block.id === editingItem.id) {
+            if (editingItem.type === 'textBlockTitle') {
+              return { ...block, title: editingItem.value };
+            }
+            if (editingItem.type === 'textBlockContent') {
+              return { ...block, content: editingItem.value };
+            }
+          }
+          return block;
+        })
+      };
+    }));
+
+    setEditingItem(null);
+  };
 
   // Hilfsfunktionen für die Navigation
   const items = React.useMemo((): NavigationItem[] => {
@@ -131,33 +147,15 @@ export const App: React.FC = () => {
   }, [categories]);
 
   const findItemById = (id: string): NavigationItem | undefined => {
-    return items.find((item: NavigationItem) => item.id === id);
+    return items.find(item => item.id === id);
   };
 
   const getCurrentIndex = (): number => {
-    return items.findIndex((item: NavigationItem) => item.id === selectedId);
-  };
-
-  const copyToClipboard = async (text: string) => {
-    try {
-      console.log('Kopiere Text:', text);
-      
-      // Direkt in Zwischenablage kopieren
-      await window.electron.copyToClipboard(text);
-      console.log('Text wurde in Zwischenablage kopiert');
-      
-      // Zeige Feedback
-      setCopyFeedback('In Zwischenablage kopiert!');
-      setTimeout(() => setCopyFeedback(null), 2000);
-    } catch (error) {
-      console.error('Fehler beim Kopieren:', error);
-      setCopyFeedback('Fehler beim Kopieren! Bitte versuchen Sie es erneut.');
-      setTimeout(() => setCopyFeedback(null), 2000);
-    }
+    return items.findIndex(item => item.id === selectedId);
   };
 
   // Keyboard Navigation
-  const handleKeyDown = React.useCallback((event: KeyboardEvent) => {
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
     const currentIndex = getCurrentIndex();
     
     switch (event.key) {
@@ -179,7 +177,7 @@ export const App: React.FC = () => {
         event.preventDefault();
         const categoryToOpen = categories.find(c => c.id === selectedId);
         if (categoryToOpen && !categoryToOpen.isOpen) {
-          setCategories(cats => cats.map(cat => 
+          setCategories(categories.map(cat => 
             cat.id === selectedId ? { ...cat, isOpen: true } : cat
           ));
         }
@@ -189,7 +187,7 @@ export const App: React.FC = () => {
         event.preventDefault();
         const categoryToClose = categories.find(c => c.id === selectedId);
         if (categoryToClose && categoryToClose.isOpen) {
-          setCategories(cats => cats.map(cat => 
+          setCategories(categories.map(cat => 
             cat.id === selectedId ? { ...cat, isOpen: false } : cat
           ));
         }
@@ -201,10 +199,9 @@ export const App: React.FC = () => {
         if (selectedItem?.type === 'textBlock' && selectedItem.content) {
           copyToClipboard(selectedItem.content);
         } else if (selectedItem?.type === 'category') {
-          // Toggle Kategorie öffnen/schließen bei Enter
           const category = categories.find(c => c.id === selectedId);
           if (category) {
-            setCategories(cats => cats.map(cat => 
+            setCategories(categories.map(cat => 
               cat.id === selectedId ? { ...cat, isOpen: !cat.isOpen } : cat
             ));
           }
@@ -214,36 +211,12 @@ export const App: React.FC = () => {
   }, [categories, selectedId, items, copyToClipboard]);
 
   // Event Listener für Keyboard Navigation
-  React.useEffect(() => {
+  useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [handleKeyDown]);
-
-  const handleWindowControls = {
-    minimize: async () => {
-      try {
-        await window.electron.minimizeWindow();
-      } catch (error) {
-        console.error('Fehler beim Minimieren:', error);
-      }
-    },
-    maximize: async () => {
-      try {
-        await window.electron.maximizeWindow();
-      } catch (error) {
-        console.error('Fehler beim Maximieren:', error);
-      }
-    },
-    close: async () => {
-      try {
-        await window.electron.closeWindow();
-      } catch (error) {
-        console.error('Fehler beim Schließen:', error);
-      }
-    }
-  };
 
   return (
     <div className="app">
@@ -252,54 +225,109 @@ export const App: React.FC = () => {
           {copyFeedback}
         </div>
       )}
-      <div className="titlebar">
-        <div className="titlebar-drag">
-          <div className="drag-icon">⋮⋮⋮</div>
-          <h1>Prompt Manager</h1>
-        </div>
-        <div className="window-controls">
-          <button onClick={handleWindowControls.minimize}>─</button>
-          <button onClick={handleWindowControls.maximize}>□</button>
-          <button onClick={handleWindowControls.close}>×</button>
-        </div>
-      </div>
       
       <div className="content">
         <div className="sidebar">
+          <div className="add-category">
+            <button 
+              onClick={() => {
+                const newId = String(Math.max(...categories.map(c => Number(c.id))) + 1);
+                setCategories([...categories, {
+                  id: newId,
+                  name: 'Neue Kategorie',
+                  isOpen: true,
+                  textBlocks: []
+                }]);
+              }}
+              className="add-button"
+            >
+              + Neue Kategorie
+            </button>
+          </div>
+          
           {categories.map(category => (
-            <div key={category.id} className="category">
+            <div key={category.id} className={`category ${category.id === selectedId ? 'selected' : ''}`}>
               <div 
-                className={`category-header ${selectedId === category.id ? 'selected' : ''}`}
+                className={`category-header ${category.id === selectedId ? 'selected' : ''}`}
                 onClick={() => {
-                  setSelectedId(category.id);
-                  setCategories(cats => cats.map(cat => 
-                    cat.id === category.id ? { ...cat, isOpen: !cat.isOpen } : cat
-                  ));
+                  if (!editingItem) {
+                    setSelectedId(category.id);
+                    setCategories(categories.map(cat => 
+                      cat.id === category.id ? { ...cat, isOpen: !cat.isOpen } : cat
+                    ));
+                  }
                 }}
               >
-                <span className="category-icon">{category.isOpen ? '▼' : '▶'}</span>
-                <span className="category-name">{category.name}</span>
+                {editingItem?.id === category.id ? (
+                  <input
+                    value={editingItem.value}
+                    onChange={(e) => setEditingItem({ ...editingItem, value: e.target.value })}
+                    onBlur={handleSaveEdit}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <>
+                    <div className="category-header-content">
+                      <span className="category-icon">{category.isOpen ? '▼' : '▶'}</span>
+                      <span className="category-name">{category.name}</span>
+                    </div>
+                    <div className="item-controls" onClick={(e) => e.stopPropagation()}>
+                      <button onClick={() => handleEdit(category.id, 'category')}>✎</button>
+                      <button onClick={() => handleDelete(category.id, 'category')}>🗑</button>
+                    </div>
+                  </>
+                )}
               </div>
               
               {category.isOpen && (
-                <div className="category-items">
+                <div className="text-blocks">
+                  <div className="add-textblock">
+                    <button 
+                      onClick={() => {
+                        const newId = `${category.id}-${category.textBlocks.length + 1}`;
+                        setCategories(categories.map(c => 
+                          c.id === category.id ? {
+                            ...c,
+                            textBlocks: [...c.textBlocks, {
+                              id: newId,
+                              title: 'Neuer Textbaustein',
+                              content: ''
+                            }]
+                          } : c
+                        ));
+                      }}
+                      className="add-button"
+                    >
+                      + Neuer Textbaustein
+                    </button>
+                  </div>
+                  
                   {category.textBlocks.map(block => (
                     <div
                       key={block.id}
-                      className={`category-item ${selectedId === block.id ? 'selected' : ''}`}
-                      onClick={() => setSelectedId(block.id)}
+                      className={`text-block ${block.id === selectedId ? 'selected' : ''}`}
+                      onClick={() => !editingItem && setSelectedId(block.id)}
                     >
-                      <span>{block.title}</span>
-                      <button 
-                        className="copy-button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          copyToClipboard(block.content);
-                        }}
-                        title="In Zwischenablage kopieren"
-                      >
-                        📋
-                      </button>
+                      {editingItem?.id === block.id && editingItem.type === 'textBlockTitle' ? (
+                        <input
+                          value={editingItem.value}
+                          onChange={(e) => setEditingItem({ ...editingItem, value: e.target.value })}
+                          onBlur={handleSaveEdit}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
+                          autoFocus
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <>
+                          <span>{block.title}</span>
+                          <div className="item-controls" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={() => handleEdit(block.id, 'textBlockTitle')}>✎</button>
+                            <button onClick={() => handleDelete(block.id, 'textBlock')}>🗑</button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -309,26 +337,58 @@ export const App: React.FC = () => {
         </div>
         
         <div className="preview">
-          {selectedId && findItemById(selectedId)?.type === 'textBlock' && (
+          {selectedId && categories.some(c => 
+            c.textBlocks.some(b => b.id === selectedId)
+          ) && (
             <div className="preview-content">
               <div className="preview-header">
                 <h2>Vorschau</h2>
-                <button 
-                  className="copy-button"
-                  onClick={() => {
-                    const content = findItemById(selectedId)?.content;
-                    if (content) {
-                      copyToClipboard(content);
-                    }
-                  }}
-                  title="In Zwischenablage kopieren"
-                >
-                  📋 Kopieren
-                </button>
+                <div className="preview-controls">
+                  <button 
+                    className="edit-button"
+                    onClick={() => {
+                      const block = categories
+                        .flatMap(c => c.textBlocks)
+                        .find(b => b.id === selectedId);
+                      if (block) {
+                        handleEdit(selectedId, 'textBlockContent');
+                      }
+                    }}
+                    title="Bearbeiten"
+                  >
+                    ✎ Bearbeiten
+                  </button>
+                  <button 
+                    className="copy-button"
+                    onClick={() => {
+                      const block = categories
+                        .flatMap(c => c.textBlocks)
+                        .find(b => b.id === selectedId);
+                      if (block) {
+                        copyToClipboard(block.content);
+                      }
+                    }}
+                    title="In Zwischenablage kopieren"
+                  >
+                    📋 Kopieren
+                  </button>
+                </div>
               </div>
-              <pre>
-                {findItemById(selectedId)?.content || ''}
-              </pre>
+              {editingItem?.id === selectedId && editingItem.type === 'textBlockContent' ? (
+                <textarea
+                  value={editingItem.value}
+                  onChange={(e) => setEditingItem({ ...editingItem, value: e.target.value })}
+                  onBlur={handleSaveEdit}
+                  autoFocus
+                  className="preview-editor"
+                />
+              ) : (
+                <pre>
+                  {categories
+                    .flatMap(c => c.textBlocks)
+                    .find(b => b.id === selectedId)?.content || ''}
+                </pre>
+              )}
             </div>
           )}
         </div>
