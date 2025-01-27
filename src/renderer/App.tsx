@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import './App.css';
 
 declare global {
   interface Window {
     electron: {
-      copyToClipboard: (text: string) => Promise<void>;
+      copyToClipboard: (text: string) => Promise<boolean>;
       getClipboardContent: () => Promise<string>;
+      minimizeWindow: () => Promise<boolean>;
+      maximizeWindow: () => Promise<boolean>;
+      closeWindow: () => Promise<boolean>;
     }
   }
 }
@@ -101,178 +104,202 @@ const DEMO_CATEGORIES = [
   }
 ];
 
+// Typen für die Navigation
+type NavigationItem = {
+  id: string;
+  type: 'category' | 'textBlock';
+  content?: string;
+};
+
 export const App: React.FC = () => {
   const [categories, setCategories] = useState(DEMO_CATEGORIES);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-  const [selectedTextBlockId, setSelectedTextBlockId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
+  // Hilfsfunktionen für die Navigation
+  const items = React.useMemo((): NavigationItem[] => {
+    const result: NavigationItem[] = [];
+    categories.forEach(category => {
+      result.push({ id: category.id, type: 'category' });
+      if (category.isOpen) {
+        category.textBlocks.forEach(block => {
+          result.push({ id: block.id, type: 'textBlock', content: block.content });
+        });
+      }
+    });
+    return result;
+  }, [categories]);
+
+  const findItemById = (id: string): NavigationItem | undefined => {
+    return items.find((item: NavigationItem) => item.id === id);
+  };
+
+  const getCurrentIndex = (): number => {
+    return items.findIndex((item: NavigationItem) => item.id === selectedId);
+  };
 
   const copyToClipboard = async (text: string) => {
     try {
-      // Hole aktuellen Clipboard-Inhalt für $clipboard Variable
-      const clipboardContent = await window.electron.getClipboardContent();
+      console.log('Kopiere Text:', text);
       
-      // Ersetze $clipboard mit aktuellem Inhalt
-      const processedText = text.replace(/\$clipboard/g, clipboardContent);
+      // Direkt in Zwischenablage kopieren
+      await window.electron.copyToClipboard(text);
+      console.log('Text wurde in Zwischenablage kopiert');
       
-      // Kopiere in Zwischenablage
-      await window.electron.copyToClipboard(processedText);
-      
-      // Optional: Visuelles Feedback
-      const preview = document.querySelector('.preview');
-      if (preview) {
-        preview.classList.add('copied');
-        setTimeout(() => preview.classList.remove('copied'), 200);
-      }
+      // Zeige Feedback
+      setCopyFeedback('In Zwischenablage kopiert!');
+      setTimeout(() => setCopyFeedback(null), 2000);
     } catch (error) {
       console.error('Fehler beim Kopieren:', error);
+      setCopyFeedback('Fehler beim Kopieren! Bitte versuchen Sie es erneut.');
+      setTimeout(() => setCopyFeedback(null), 2000);
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    const currentCategory = categories.find(c => c.id === selectedCategoryId);
+  // Keyboard Navigation
+  const handleKeyDown = React.useCallback((event: KeyboardEvent) => {
+    const currentIndex = getCurrentIndex();
     
-    switch(e.key) {
+    switch (event.key) {
       case 'ArrowUp':
-        e.preventDefault();
-        if (selectedCategoryId) {
-          const currentCatIndex = categories.findIndex(c => c.id === selectedCategoryId);
-          const currentCat = categories[currentCatIndex];
-          
-          if (selectedTextBlockId && currentCat.isOpen) {
-            // In Textbausteinen navigieren
-            const textBlockIndex = currentCat.textBlocks.findIndex(t => t.id === selectedTextBlockId);
-            if (textBlockIndex > 0) {
-              // Zum vorherigen Textbaustein
-              setSelectedTextBlockId(currentCat.textBlocks[textBlockIndex - 1].id);
-            } else {
-              // Zur Kategorie
-              setSelectedTextBlockId(null);
-            }
-          } else if (currentCatIndex > 0) {
-            // Zur vorherigen Kategorie
-            const prevCat = categories[currentCatIndex - 1];
-            setSelectedCategoryId(prevCat.id);
-            if (prevCat.isOpen && prevCat.textBlocks.length > 0) {
-              // Zum letzten Textbaustein der vorherigen Kategorie
-              setSelectedTextBlockId(prevCat.textBlocks[prevCat.textBlocks.length - 1].id);
-            } else {
-              setSelectedTextBlockId(null);
-            }
-          }
-        } else {
-          setSelectedCategoryId(categories[0].id);
+        event.preventDefault();
+        if (currentIndex > 0) {
+          setSelectedId(items[currentIndex - 1].id);
         }
         break;
 
       case 'ArrowDown':
-        e.preventDefault();
-        if (selectedCategoryId) {
-          const currentCatIndex = categories.findIndex(c => c.id === selectedCategoryId);
-          const currentCat = categories[currentCatIndex];
-          
-          if (currentCat.isOpen && (!selectedTextBlockId && currentCat.textBlocks.length > 0)) {
-            // Zum ersten Textbaustein
-            setSelectedTextBlockId(currentCat.textBlocks[0].id);
-          } else if (selectedTextBlockId && currentCat.isOpen) {
-            // In Textbausteinen navigieren
-            const textBlockIndex = currentCat.textBlocks.findIndex(t => t.id === selectedTextBlockId);
-            if (textBlockIndex < currentCat.textBlocks.length - 1) {
-              // Zum nächsten Textbaustein
-              setSelectedTextBlockId(currentCat.textBlocks[textBlockIndex + 1].id);
-            } else if (currentCatIndex < categories.length - 1) {
-              // Zur nächsten Kategorie
-              setSelectedCategoryId(categories[currentCatIndex + 1].id);
-              setSelectedTextBlockId(null);
-            }
-          } else if (currentCatIndex < categories.length - 1) {
-            // Zur nächsten Kategorie
-            setSelectedCategoryId(categories[currentCatIndex + 1].id);
-            setSelectedTextBlockId(null);
-          }
-        } else {
-          setSelectedCategoryId(categories[0].id);
+        event.preventDefault();
+        if (currentIndex < items.length - 1) {
+          setSelectedId(items[currentIndex + 1].id);
+        }
+        break;
+
+      case 'ArrowRight':
+        event.preventDefault();
+        const categoryToOpen = categories.find(c => c.id === selectedId);
+        if (categoryToOpen && !categoryToOpen.isOpen) {
+          setCategories(cats => cats.map(cat => 
+            cat.id === selectedId ? { ...cat, isOpen: true } : cat
+          ));
+        }
+        break;
+
+      case 'ArrowLeft':
+        event.preventDefault();
+        const categoryToClose = categories.find(c => c.id === selectedId);
+        if (categoryToClose && categoryToClose.isOpen) {
+          setCategories(cats => cats.map(cat => 
+            cat.id === selectedId ? { ...cat, isOpen: false } : cat
+          ));
         }
         break;
 
       case 'Enter':
-        e.preventDefault();
-        if (selectedCategoryId) {
-          if (selectedTextBlockId) {
-            // Textbaustein in Zwischenablage kopieren
-            const textBlock = categories
-              .find(c => c.textBlocks.some(b => b.id === selectedTextBlockId))
-              ?.textBlocks.find(b => b.id === selectedTextBlockId);
-            
-            if (textBlock) {
-              copyToClipboard(textBlock.content);
-            }
-          } else {
-            // Kategorie auf/zuklappen
+        event.preventDefault();
+        const selectedItem = findItemById(selectedId || '');
+        if (selectedItem?.type === 'textBlock' && selectedItem.content) {
+          copyToClipboard(selectedItem.content);
+        } else if (selectedItem?.type === 'category') {
+          // Toggle Kategorie öffnen/schließen bei Enter
+          const category = categories.find(c => c.id === selectedId);
+          if (category) {
             setCategories(cats => cats.map(cat => 
-              cat.id === selectedCategoryId 
-                ? { ...cat, isOpen: !cat.isOpen }
-                : cat
+              cat.id === selectedId ? { ...cat, isOpen: !cat.isOpen } : cat
             ));
           }
         }
         break;
+    }
+  }, [categories, selectedId, items, copyToClipboard]);
 
-      case 'Escape':
-        e.preventDefault();
-        if (selectedTextBlockId) {
-          setSelectedTextBlockId(null);
-        } else {
-          setSelectedCategoryId(null);
-        }
-        break;
+  // Event Listener für Keyboard Navigation
+  React.useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleKeyDown]);
+
+  const handleWindowControls = {
+    minimize: async () => {
+      try {
+        await window.electron.minimizeWindow();
+      } catch (error) {
+        console.error('Fehler beim Minimieren:', error);
+      }
+    },
+    maximize: async () => {
+      try {
+        await window.electron.maximizeWindow();
+      } catch (error) {
+        console.error('Fehler beim Maximieren:', error);
+      }
+    },
+    close: async () => {
+      try {
+        await window.electron.closeWindow();
+      } catch (error) {
+        console.error('Fehler beim Schließen:', error);
+      }
     }
   };
 
-  // Fokus auf Container setzen
-  useEffect(() => {
-    const container = document.getElementById('app-container');
-    if (container) {
-      container.focus();
-    }
-  }, []);
-
   return (
-    <div 
-      id="app-container"
-      className="app" 
-      onKeyDown={handleKeyDown} 
-      tabIndex={0}
-    >
-      <h1>Prompt Manager</h1>
-      <div className="main-container">
-        <div className="category-list">
+    <div className="app">
+      {copyFeedback && (
+        <div className="copy-feedback">
+          {copyFeedback}
+        </div>
+      )}
+      <div className="titlebar">
+        <div className="titlebar-drag">
+          <div className="drag-icon">⋮⋮⋮</div>
+          <h1>Prompt Manager</h1>
+        </div>
+        <div className="window-controls">
+          <button onClick={handleWindowControls.minimize}>─</button>
+          <button onClick={handleWindowControls.maximize}>□</button>
+          <button onClick={handleWindowControls.close}>×</button>
+        </div>
+      </div>
+      
+      <div className="content">
+        <div className="sidebar">
           {categories.map(category => (
-            <div key={category.id}>
-              <div
-                className={`category-item ${selectedCategoryId === category.id ? 'selected' : ''}`}
+            <div key={category.id} className="category">
+              <div 
+                className={`category-header ${selectedId === category.id ? 'selected' : ''}`}
                 onClick={() => {
-                  setSelectedCategoryId(category.id);
+                  setSelectedId(category.id);
                   setCategories(cats => cats.map(cat => 
-                    cat.id === category.id 
-                      ? { ...cat, isOpen: !cat.isOpen }
-                      : cat
+                    cat.id === category.id ? { ...cat, isOpen: !cat.isOpen } : cat
                   ));
                 }}
               >
-                {category.isOpen ? '▼' : '▶'} {category.name}
+                <span className="category-icon">{category.isOpen ? '▼' : '▶'}</span>
+                <span className="category-name">{category.name}</span>
               </div>
+              
               {category.isOpen && (
-                <div className="text-block-list">
+                <div className="category-items">
                   {category.textBlocks.map(block => (
                     <div
                       key={block.id}
-                      className={`text-block-item ${selectedTextBlockId === block.id ? 'selected' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedTextBlockId(block.id);
-                      }}
+                      className={`category-item ${selectedId === block.id ? 'selected' : ''}`}
+                      onClick={() => setSelectedId(block.id)}
                     >
-                      {block.title}
+                      <span>{block.title}</span>
+                      <button 
+                        className="copy-button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyToClipboard(block.content);
+                        }}
+                        title="In Zwischenablage kopieren"
+                      >
+                        📋
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -280,15 +307,27 @@ export const App: React.FC = () => {
             </div>
           ))}
         </div>
-        <div className="preview-container">
-          {selectedTextBlockId && (
-            <div className="preview">
-              <h2>Vorschau</h2>
-              <pre className="content">
-                {categories
-                  .find(c => c.textBlocks.some(b => b.id === selectedTextBlockId))
-                  ?.textBlocks.find(b => b.id === selectedTextBlockId)
-                  ?.content || ''}
+        
+        <div className="preview">
+          {selectedId && findItemById(selectedId)?.type === 'textBlock' && (
+            <div className="preview-content">
+              <div className="preview-header">
+                <h2>Vorschau</h2>
+                <button 
+                  className="copy-button"
+                  onClick={() => {
+                    const content = findItemById(selectedId)?.content;
+                    if (content) {
+                      copyToClipboard(content);
+                    }
+                  }}
+                  title="In Zwischenablage kopieren"
+                >
+                  📋 Kopieren
+                </button>
+              </div>
+              <pre>
+                {findItemById(selectedId)?.content || ''}
               </pre>
             </div>
           )}
